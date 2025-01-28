@@ -7,7 +7,7 @@ local players = game:GetService("Players")
 local player = players.LocalPlayer
 local mouse = player:GetMouse()
 
-local createdBodyPositions = {} -- Table to track created BodyPosition instances
+local createdBodyPositions = {}
 
 -- Function to create and set up the tool
 local function createTool()
@@ -15,8 +15,8 @@ local function createTool()
     tool.RequiresHandle = false
     tool.Name = "evilions blackhole tool"
     tool.Parent = player.Backpack
-    tool.ToolTip = "unequip = stop bringing parts"
-    -- Function to move parts towards a target
+    tool.ToolTip = "Unequip = stop bringing parts"
+
     local function moveParts(target)
         local function updatePart(part)
             if part:IsA("BasePart") and not part.Anchored and not part:IsDescendantOf(player.Character) then
@@ -25,7 +25,7 @@ local function createTool()
                     bp = Instance.new("BodyPosition")
                     bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                     bp.Parent = part
-                    table.insert(createdBodyPositions, bp) -- Track the BodyPosition
+                    table.insert(createdBodyPositions, bp)
                 end
                 bp.Position = target
             end
@@ -38,47 +38,64 @@ local function createTool()
         workspace.DescendantAdded:Connect(updatePart)
     end
 
-    -- Function to clear all created BodyPositions
     local function clearBodyPositions()
         for _, bp in pairs(createdBodyPositions) do
             if bp and bp.Parent then
                 bp:Destroy()
             end
         end
-        createdBodyPositions = {} -- Reset the tracking table
+        createdBodyPositions = {}
     end
 
     -- Tool activation logic
     tool.Activated:Connect(function()
-        local target
-        if input.TouchEnabled and #input:GetTouches() > 0 then
-            local touch = input:GetTouches()[1]
-            local ray = workspace.CurrentCamera:ViewportPointToRay(touch.Position.X, touch.Position.Y)
-            local hit = workspace:Raycast(ray.Origin, ray.Direction * 1000)
-            if hit then
-                target = hit.Position
-            end
+        local function handleTouchTap()
+            local connection
+            connection = input.TouchTap:Connect(function(touchPositions)
+                if #touchPositions > 0 then
+                    local touch = touchPositions[1]
+                    local camera = workspace.CurrentCamera
+                    local viewportPoint = touch
+
+                    -- Adjust ray length for far distances
+                    local ray = camera:ViewportPointToRay(viewportPoint.X, viewportPoint.Y)
+                    local raycastResult = workspace:Raycast(ray.Origin, ray.Direction * 5000) -- Increased to 5000 studs
+
+                    if raycastResult then
+                        local target = raycastResult.Position
+                        moveParts(target)
+                    else
+                        -- If no hit, use a distant point
+                        local farTarget = ray.Origin + ray.Direction * 5000
+                        moveParts(farTarget)
+                    end
+                end
+            end)
+
+            tool.Unequipped:Connect(function()
+                connection:Disconnect()
+                clearBodyPositions()
+            end)
+        end
+
+        if input.TouchEnabled then
+            -- Mobile touch handling
+            handleTouchTap()
         else
-            target = mouse.Hit.p
-        end
-
-        if target then
-            moveParts(target)
+            -- PC mouse handling
+            local target = mouse.Hit.p
+            if target then
+                moveParts(target)
+            end
         end
     end)
 
-    -- Tool unequip logic
-    tool.Unequipped:Connect(function()
-        clearBodyPositions() -- Clear all BodyPositions when the tool is unequipped
-    end)
+    tool.Unequipped:Connect(clearBodyPositions)
 end
 
--- Create the tool for the first time
 createTool()
 
--- Ensure the tool is re-added after the player respawns
 player.CharacterAdded:Connect(function()
-    -- Wait for the character to load fully before adding the tool
     player.Character:WaitForChild("Humanoid")
     createTool()
 end)
