@@ -1,4 +1,4 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/evilionx3/new-scripts/refs/heads/main/partclaim.lua"))() 
+loadstring(game:HttpGet("https://raw.githubusercontent.com/evilionx3/new-scripts/refs/heads/main/partclaim.lua"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/evilionx3/discord/refs/heads/main/r"))()
 -- not obfuscated because i used chatgpt lmao
 
@@ -47,50 +47,64 @@ local function createTool()
         createdBodyPositions = {}
     end
 
+    local isHolding = false
+
+    local function updatePartsFollowingMouse()
+        while isHolding do
+            currentTarget = mouse.Hit.p
+            if currentTarget then
+                moveParts(currentTarget)
+            end
+            task.wait(0) -- Update every frame
+        end
+    end
+
     -- Tool activation logic
     tool.Activated:Connect(function()
-        local function handleTouchTap()
-            local connection
-            connection = input.TouchTap:Connect(function(touchPositions)
-                if #touchPositions > 0 then
-                    local touch = touchPositions[1]
-                    local camera = workspace.CurrentCamera
-                    local viewportPoint = touch
-
-                    -- Adjust ray length for far distances
-                    local ray = camera:ViewportPointToRay(viewportPoint.X, viewportPoint.Y)
-                    local raycastResult = workspace:Raycast(ray.Origin, ray.Direction * 5000) -- Increased to 5000 studs
-
-                    if raycastResult then
-                        local target = raycastResult.Position
-                        moveParts(target)
-                    else
-                        -- If no hit, use a distant point
-                        local farTarget = ray.Origin + ray.Direction * 5000
-                        moveParts(farTarget)
-                    end
-                end
-            end)
-
-            tool.Unequipped:Connect(function()
-                connection:Disconnect()
-                clearBodyPositions()
-            end)
-        end
-
-        if input.TouchEnabled then
-            -- Mobile touch handling
-            handleTouchTap()
-        else
-            -- PC mouse handling
-            local target = mouse.Hit.p
-            if target then
-                moveParts(target)
+        if not isHolding then
+            isHolding = true
+            if input.TouchEnabled then
+                -- Mobile: Set position once on tap
+                local targetPosition = mouse.Hit.p
+                moveParts(targetPosition)
+                isHolding = false
+            else
+                -- PC: Start dragging
+                updatePartsFollowingMouse()
             end
         end
     end)
 
-    tool.Unequipped:Connect(clearBodyPositions)
+    -- Tool unequipped logic
+    tool.Unequipped:Connect(function()
+        isHolding = false
+        clearBodyPositions()
+    end)
+
+    -- Listen for mouse button events (PC)
+    input.InputBegan:Connect(function(inputObj)
+        if inputObj.UserInputType == Enum.UserInputType.MouseButton1 and player.Character:FindFirstChildOfClass("Tool") == tool then
+            if not isHolding and not input.TouchEnabled then
+                isHolding = true
+                updatePartsFollowingMouse()
+            end
+        end
+    end)
+
+    input.InputEnded:Connect(function(inputObj)
+        if inputObj.UserInputType == Enum.UserInputType.MouseButton1 and player.Character:FindFirstChildOfClass("Tool") == tool then
+            isHolding = false
+        end
+    end)
+
+    -- Listen for touch events in the world (Mobile)
+    input.TouchTapInWorld:Connect(function(touchPositions, gameProcessedEvent)
+        if not gameProcessedEvent and player.Character:FindFirstChildOfClass("Tool") == tool then
+            local touchPosition = touchPositions[1]
+            local targetPosition = workspace.CurrentCamera:ScreenPointToRay(touchPosition.X, touchPosition.Y).Origin
+            moveParts(targetPosition)
+        end
+    end)
 end
 
 createTool()
